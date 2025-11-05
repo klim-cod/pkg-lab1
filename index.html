@@ -1,0 +1,660 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Color Model Converter — RGB ↔ Lab ↔ CMYK</title>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --card: #f8f9fa;
+      --muted: #6c757d;
+      --accent: #007bff;
+      --border: #dee2e6;
+    }
+    
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: #212529;
+      margin: 0;
+      padding: 20px;
+      line-height: 1.5;
+    }
+    
+    .app {
+      max-width: 1000px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 300px 1fr;
+      gap: 20px;
+    }
+    
+    .panel {
+      background: var(--card);
+      padding: 20px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    h1 {
+      margin: 0 0 8px;
+      font-size: 20px;
+      font-weight: 600;
+    }
+    
+    .swatch {
+      height: 100px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      margin-bottom: 16px;
+      transition: all 0.2s ease;
+    }
+    
+    label {
+      display: block;
+      margin-top: 12px;
+      font-size: 14px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+    
+    .row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    
+    input[type=range] {
+      width: 100%;
+      height: 6px;
+      border-radius: 3px;
+      background: #e9ecef;
+      outline: none;
+    }
+    
+    input[type=range]::-webkit-slider-thumb {
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+    }
+    
+    .field {
+      background: white;
+      padding: 8px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+    }
+    
+    input[type=number] {
+      width: 100%;
+      background: transparent;
+      border: none;
+      color: inherit;
+      font-weight: 500;
+      font-size: 14px;
+    }
+    
+    input[type=number]:focus {
+      outline: none;
+    }
+    
+    .models {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+    
+    .chip {
+      background: white;
+      padding: 6px 12px;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      font-size: 12px;
+      font-weight: 500;
+    }
+    
+    .warn {
+      color: #dc3545;
+      font-size: 13px;
+      margin-top: 12px;
+      padding: 8px 12px;
+      background: #f8d7da;
+      border-radius: 4px;
+      border: 1px solid #f5c6cb;
+    }
+    
+    .model {
+      margin-bottom: 16px;
+    }
+    
+    .model h3 {
+      margin: 0 0 12px 0;
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    
+    .channel {
+      margin-bottom: 10px;
+    }
+    
+    .channel label {
+      margin-top: 0;
+      margin-bottom: 6px;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 16px;
+    }
+    
+    .legend {
+      font-size: 13px;
+      color: var(--muted);
+    }
+    
+    @media (max-width: 768px) {
+      .app {
+        grid-template-columns: 1fr;
+        gap: 16px;
+      }
+      
+      body {
+        padding: 16px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+    <div class="panel">
+      <div class="topbar">
+        <div>
+          <h1>Color Model Converter</h1>
+          <div class="legend">RGB ↔ Lab ↔ CMYK</div>
+        </div>
+      </div>
+
+      <div class="swatch" id="swatch">#000000</div>
+
+      <label>Выбрать цвет</label>
+      <div class="row">
+        <input type="color" id="colorPicker" value="#000000" style="height:40px;width:60px;border-radius:6px;border:1px solid var(--border);cursor:pointer">
+        <div style="flex:1">
+          <input type="text" id="hexInput" value="#000000" style="width:100%;background:white;padding:10px 12px;border-radius:6px;border:1px solid var(--border);color:inherit;font-weight:600;font-size:14px">
+        </div>
+      </div>
+
+      <div style="margin-top:16px">
+        <label>Цветовые модели</label>
+        <div class="models">
+          <span class="chip">RGB</span>
+          <span class="chip">Lab</span>
+          <span class="chip">CMYK</span>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="panel" id="panRight">
+      <div id="modelsArea"></div>
+      <div class="warn" id="warn" style="display:none"></div>
+    </div>
+  </div>
+
+  <script>
+let currentColor = {
+  rgb: { r: 0, g: 0, b: 0 },
+  lab: { l: 0, a: 0, b: 0 },
+  cmyk: { c: 0, m: 0, y: 0, k: 100 }
+};
+
+const whitePoint = { x: 95.047, y: 100, z: 108.883 };
+
+document.addEventListener('DOMContentLoaded', function() {
+  createModelControls();
+  setupEventListeners();
+  updateFromRgb();
+});
+
+function createModelControls() {
+  const modelsArea = document.getElementById('modelsArea');
+  
+  const models = [
+    {
+      name: 'RGB',
+      channels: [
+        { id: 'r', label: 'R', min: 0, max: 255, step: 1 },
+        { id: 'g', label: 'G', min: 0, max: 255, step: 1 },
+        { id: 'b', label: 'B', min: 0, max: 255, step: 1 }
+      ]
+    },
+    {
+      name: 'Lab',
+      channels: [
+        { id: 'l', label: 'L', min: 0, max: 100, step: 0.1 },
+        { id: 'a', label: 'a', min: -128, max: 127, step: 0.1 },
+        { id: 'b', label: 'b', min: -128, max: 127, step: 0.1 }
+      ]
+    },
+    {
+      name: 'CMYK',
+      channels: [
+        { id: 'c', label: 'C', min: 0, max: 100, step: 0.1 },
+        { id: 'm', label: 'M', min: 0, max: 100, step: 0.1 },
+        { id: 'y', label: 'Y', min: 0, max: 100, step: 0.1 },
+        { id: 'k', label: 'K', min: 0, max: 100, step: 0.1 }
+      ]
+    }
+  ];
+
+  modelsArea.innerHTML = models.map(model => `
+    <div class="model">
+      <h3>${model.name}</h3>
+      ${model.channels.map(channel => `
+        <div class="channel">
+          <label>${channel.label}</label>
+          <input type="range" id="${model.name.toLowerCase()}-${channel.id}" 
+                 min="${channel.min}" max="${channel.max}" step="${channel.step}" 
+                 value="${channel.min}">
+          <div class="field">
+            <input type="number" id="${model.name.toLowerCase()}-${channel.id}-num" 
+                   min="${channel.min}" max="${channel.max}" step="${channel.step}" 
+                   value="${channel.min}">
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `).join('');
+}
+
+function setupEventListeners() {
+  document.getElementById('rgb-r').addEventListener('input', function() {
+    document.getElementById('rgb-r-num').value = this.value;
+    updateRgbFromControls();
+  });
+  document.getElementById('rgb-g').addEventListener('input', function() {
+    document.getElementById('rgb-g-num').value = this.value;
+    updateRgbFromControls();
+  });
+  document.getElementById('rgb-b').addEventListener('input', function() {
+    document.getElementById('rgb-b-num').value = this.value;
+    updateRgbFromControls();
+  });
+
+  document.getElementById('rgb-r-num').addEventListener('input', function() {
+    document.getElementById('rgb-r').value = this.value;
+    updateRgbFromControls();
+  });
+  document.getElementById('rgb-g-num').addEventListener('input', function() {
+    document.getElementById('rgb-g').value = this.value;
+    updateRgbFromControls();
+  });
+  document.getElementById('rgb-b-num').addEventListener('input', function() {
+    document.getElementById('rgb-b').value = this.value;
+    updateRgbFromControls();
+  });
+
+  document.getElementById('lab-l').addEventListener('input', function() {
+    document.getElementById('lab-l-num').value = this.value;
+    updateLabFromControls();
+  });
+  document.getElementById('lab-a').addEventListener('input', function() {
+    document.getElementById('lab-a-num').value = this.value;
+    updateLabFromControls();
+  });
+  document.getElementById('lab-b').addEventListener('input', function() {
+    document.getElementById('lab-b-num').value = this.value;
+    updateLabFromControls();
+  });
+
+  document.getElementById('lab-l-num').addEventListener('input', function() {
+    document.getElementById('lab-l').value = this.value;
+    updateLabFromControls();
+  });
+  document.getElementById('lab-a-num').addEventListener('input', function() {
+    document.getElementById('lab-a').value = this.value;
+    updateLabFromControls();
+  });
+  document.getElementById('lab-b-num').addEventListener('input', function() {
+    document.getElementById('lab-b').value = this.value;
+    updateLabFromControls();
+  });
+
+  document.getElementById('cmyk-c').addEventListener('input', function() {
+    document.getElementById('cmyk-c-num').value = this.value;
+    updateCmykFromControls();
+  });
+  document.getElementById('cmyk-m').addEventListener('input', function() {
+    document.getElementById('cmyk-m-num').value = this.value;
+    updateCmykFromControls();
+  });
+  document.getElementById('cmyk-y').addEventListener('input', function() {
+    document.getElementById('cmyk-y-num').value = this.value;
+    updateCmykFromControls();
+  });
+  document.getElementById('cmyk-k').addEventListener('input', function() {
+    document.getElementById('cmyk-k-num').value = this.value;
+    updateCmykFromControls();
+  });
+
+  document.getElementById('cmyk-c-num').addEventListener('input', function() {
+    document.getElementById('cmyk-c').value = this.value;
+    updateCmykFromControls();
+  });
+  document.getElementById('cmyk-m-num').addEventListener('input', function() {
+    document.getElementById('cmyk-m').value = this.value;
+    updateCmykFromControls();
+  });
+  document.getElementById('cmyk-y-num').addEventListener('input', function() {
+    document.getElementById('cmyk-y').value = this.value;
+    updateCmykFromControls();
+  });
+  document.getElementById('cmyk-k-num').addEventListener('input', function() {
+    document.getElementById('cmyk-k').value = this.value;
+    updateCmykFromControls();
+  });
+
+  document.getElementById('colorPicker').addEventListener('input', function() {
+    const hex = this.value;
+    document.getElementById('hexInput').value = hex;
+    updateFromHex(hex);
+  });
+
+  document.getElementById('hexInput').addEventListener('input', function() {
+    let hex = this.value;
+    if (!hex.startsWith('#')) {
+      hex = '#' + hex;
+      this.value = hex;
+    }
+    if (/^#[0-9A-F]{6}$/i.test(hex)) {
+      document.getElementById('colorPicker').value = hex;
+      updateFromHex(hex);
+    }
+  });
+
+  const numberInputs = document.querySelectorAll('input[type="number"]');
+  numberInputs.forEach(input => {
+    input.addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        this.blur();
+      }
+    });
+  });
+}
+
+function updateRgbFromControls() {
+  currentColor.rgb = {
+    r: Math.max(0, Math.min(255, parseInt(document.getElementById('rgb-r').value) || 0)),
+    g: Math.max(0, Math.min(255, parseInt(document.getElementById('rgb-g').value) || 0)),
+    b: Math.max(0, Math.min(255, parseInt(document.getElementById('rgb-b').value) || 0))
+  };
+  updateFromRgb();
+}
+
+function updateLabFromControls() {
+  currentColor.lab = {
+    l: Math.max(0, Math.min(100, parseFloat(document.getElementById('lab-l').value) || 0)),
+    a: Math.max(-128, Math.min(127, parseFloat(document.getElementById('lab-a').value) || 0)),
+    b: Math.max(-128, Math.min(127, parseFloat(document.getElementById('lab-b').value) || 0))
+  };
+  updateFromLab();
+}
+
+function updateCmykFromControls() {
+  currentColor.cmyk = {
+    c: Math.max(0, Math.min(100, parseFloat(document.getElementById('cmyk-c').value) || 0)),
+    m: Math.max(0, Math.min(100, parseFloat(document.getElementById('cmyk-m').value) || 0)),
+    y: Math.max(0, Math.min(100, parseFloat(document.getElementById('cmyk-y').value) || 0)),
+    k: Math.max(0, Math.min(100, parseFloat(document.getElementById('cmyk-k').value) || 0))
+  };
+  updateFromCmyk();
+}
+
+function updateAllDisplays() {
+  updateControl('rgb', 'r', currentColor.rgb.r, 0);
+  updateControl('rgb', 'g', currentColor.rgb.g, 0);
+  updateControl('rgb', 'b', currentColor.rgb.b, 0);
+  
+  updateControl('lab', 'l', currentColor.lab.l, 1);
+  updateControl('lab', 'a', currentColor.lab.a, 1);
+  updateControl('lab', 'b', currentColor.lab.b, 1);
+  
+  updateControl('cmyk', 'c', currentColor.cmyk.c, 1);
+  updateControl('cmyk', 'm', currentColor.cmyk.m, 1);
+  updateControl('cmyk', 'y', currentColor.cmyk.y, 1);
+  updateControl('cmyk', 'k', currentColor.cmyk.k, 1);
+  
+  const hex = rgbToHex(currentColor.rgb.r, currentColor.rgb.g, currentColor.rgb.b);
+  document.getElementById('hexInput').value = hex;
+  document.getElementById('colorPicker').value = hex;
+  
+  const swatch = document.getElementById('swatch');
+  swatch.textContent = hex;
+  swatch.style.backgroundColor = hex;
+  
+  updateWarnings();
+}
+
+function updateWarnings() {
+  const warn = document.getElementById('warn');
+  const { r, g, b } = currentColor.rgb;
+  
+  let warnings = [];
+  
+  if (r < 0 || r > 255 || g < 0 || g > 255 || b < 0 || b > 255) {
+    warnings.push('Цвет вне sRGB gamut!');
+  }
+  
+  const { l, a, b: labB } = currentColor.lab;
+  if (l < 0 || l > 100) {
+    warnings.push('L* должен быть в диапазоне 0-100');
+  }
+  
+  warn.textContent = warnings.join(' | ');
+  warn.style.display = warnings.length > 0 ? 'block' : 'none';
+}
+
+function rgbToCmyk(r, g, b) {
+  r = r / 255;
+  g = g / 255;
+  b = b / 255;
+  
+  const k = 1 - Math.max(r, g, b);
+  
+  if (k === 1) {
+    return { c: 0, m: 0, y: 0, k: 100 };
+  }
+  
+  const c = (1 - r - k) / (1 - k);
+  const m = (1 - g - k) / (1 - k);
+  const y = (1 - b - k) / (1 - k);
+  
+  return {
+    c: Math.round(c * 100),
+    m: Math.round(m * 100),
+    y: Math.round(y * 100),
+    k: Math.round(k * 100)
+  };
+}
+
+function cmykToRgb(c, m, y, k) {
+  c = c / 100;
+  m = m / 100;
+  y = y / 100;
+  k = k / 100;
+  
+  const r = 255 * (1 - c) * (1 - k);
+  const g = 255 * (1 - m) * (1 - k);
+  const b = 255 * (1 - y) * (1 - k);
+  
+  return {
+    r: Math.round(r),
+    g: Math.round(g),
+    b: Math.round(b)
+  };
+}
+
+function rgbToXyz(r, g, b) {
+  const toLinear = (c) => {
+    c = c / 255;
+    return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  };
+
+  const Rn = toLinear(r) * 100;
+  const Gn = toLinear(g) * 100;
+  const Bn = toLinear(b) * 100;
+
+  const x = 0.412453 * Rn + 0.357580 * Gn + 0.180423 * Bn;
+  const y = 0.212671 * Rn + 0.715160 * Gn + 0.072169 * Bn;
+  const z = 0.019334 * Rn + 0.119193 * Gn + 0.950227 * Bn;
+
+  return { x, y, z };
+}
+
+function xyzToRgb(x, y, z) {
+  const Rn = 3.2406 * (x/100) - 1.5372 * (y/100) - 0.4986 * (z/100);
+  const Gn = -0.9689 * (x/100) + 1.8758 * (y/100) + 0.0415 * (z/100);
+  const Bn = 0.0557 * (x/100) - 0.2040 * (y/100) + 1.0570 * (z/100);
+
+  const fromLinear = (c) => {
+    c = Math.max(0, Math.min(1, c));
+    return c <= 0.0031308 ? 
+      Math.round(255 * 12.92 * c) : 
+      Math.round(255 * (1.055 * Math.pow(c, 1/2.4) - 0.055));
+  };
+
+  return {
+    r: fromLinear(Rn),
+    g: fromLinear(Gn),
+    b: fromLinear(Bn)
+  };
+}
+
+function xyzToLab(x, y, z) {
+  const f = (t) => {
+    const delta = 6/29;
+    return t > Math.pow(delta, 3) ? 
+      Math.pow(t, 1/3) : 
+      t/(3 * delta * delta) + 4/29;
+  };
+
+  const fx = f(x / whitePoint.x);
+  const fy = f(y / whitePoint.y);
+  const fz = f(z / whitePoint.z);
+
+  const l = 116 * fy - 16;
+  const a = 500 * (fx - fy);
+  const b = 200 * (fy - fz);
+
+  return { l, a, b };
+}
+
+function labToXyz(l, a, b) {
+  const f_inv = (t) => {
+    const delta = 6/29;
+    return t > delta ? 
+      Math.pow(t, 3) : 
+      3 * delta * delta * (t - 4/29);
+  };
+
+  const fy = (l + 16) / 116;
+  const fx = fy + a / 500;
+  const fz = fy - b / 200;
+
+  const x = whitePoint.x * f_inv(fx);
+  const y = whitePoint.y * f_inv(fy);
+  const z = whitePoint.z * f_inv(fz);
+
+  return { x, y, z };
+}
+
+function rgbToLab(r, g, b) {
+  const xyz = rgbToXyz(r, g, b);
+  return xyzToLab(xyz.x, xyz.y, xyz.z);
+}
+
+function labToRgb(l, a, b) {
+  const xyz = labToXyz(l, a, b);
+  return xyzToRgb(xyz.x, xyz.y, xyz.z);
+}
+
+function updateFromRgb() {
+  const { r, g, b } = currentColor.rgb;
+  
+  currentColor.lab = rgbToLab(r, g, b);
+  currentColor.cmyk = rgbToCmyk(r, g, b);
+  
+  updateAllDisplays();
+}
+
+function updateFromLab() {
+  const { l, a, b } = currentColor.lab;
+  
+  currentColor.rgb = labToRgb(l, a, b);
+  currentColor.cmyk = rgbToCmyk(currentColor.rgb.r, currentColor.rgb.g, currentColor.rgb.b);
+  
+  updateAllDisplays();
+}
+
+function updateFromCmyk() {
+  const { c, m, y, k } = currentColor.cmyk;
+  
+  currentColor.rgb = cmykToRgb(c, m, y, k);
+  currentColor.lab = rgbToLab(currentColor.rgb.r, currentColor.rgb.g, currentColor.rgb.b);
+  
+  updateAllDisplays();
+}
+
+function updateFromHex(hex) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  
+  currentColor.rgb = { r, g, b };
+  updateFromRgb();
+}
+
+function updateControl(model, channel, value, decimals) {
+  const slider = document.getElementById(`${model}-${channel}`);
+  const number = document.getElementById(`${model}-${channel}-num`);
+  
+  let formattedValue;
+  if (decimals === 0) {
+    formattedValue = Math.round(value);
+  } else {
+    formattedValue = parseFloat(value.toFixed(decimals));
+  }
+  
+  if (parseFloat(slider.value) !== formattedValue) {
+    slider.value = formattedValue;
+  }
+  if (parseFloat(number.value) !== formattedValue) {
+    number.value = formattedValue;
+  }
+}
+
+function rgbToHex(r, g, b) {
+  return '#' + [r, g, b].map(x => {
+    const hex = Math.max(0, Math.min(255, x)).toString(16);
+    return hex.length === 1 ? '0' + hex : hex;
+  }).join('');
+}
+  </script>
+</body>
+</html>
